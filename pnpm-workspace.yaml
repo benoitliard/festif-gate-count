@@ -1,0 +1,3 @@
+packages:
+  - "packages/dashboard-api"
+  - "packages/dashboard-web"

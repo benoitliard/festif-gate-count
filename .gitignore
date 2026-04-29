@@ -1,0 +1,24 @@
+node_modules/
+dist/
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+
+# data
+packages/*/data/*.db
+packages/*/data/*.db-journal
+packages/*/data/*.db-wal
+packages/*/data/*.db-shm
+infra/mosquitto/data/*
+!infra/mosquitto/data/.gitkeep
+
+# editor
+.DS_Store
+.vscode/
+.idea/
+
+# env
+.env
+.env.local
