@@ -29,3 +29,6 @@ packages/dashboard-web/dev-dist/
 # YOLO model weights (downloaded on first run)
 *.pt
 yolov*.pt
+
+# claude code worktrees (local dev)
+.claude/worktrees/
