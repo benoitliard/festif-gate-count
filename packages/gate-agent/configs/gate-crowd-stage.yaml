@@ -9,15 +9,18 @@ db_path: data/{gate_id}.db
 preview_port: 8601
 
 crowd:
-  engine: yolo-tiles
-  snapshot_interval_seconds: 8     # for the demo; bump to 30-60 in production
+  engine: csrnet
+  snapshot_interval_seconds: 8     # demo cadence; 30-60s is fine in production
   source: image-file               # offline dry-run with a still
   image_path: ../../assets/festival-night.jpg
 
-  # YOLO+tiles params. Aggressive defaults: 4x4 grid, 20% overlap, low conf
-  # threshold to catch tiny heads in crowd photos. Even so, YOLO undercounts
-  # heavily on dense night-time festival shots — switch to engine: csrnet for
-  # production accuracy. See README for ONNX export instructions.
+  # CSRNet (density-map model, ShanghaiTech Part B pretrained)
+  # Re-export from a .pth.tar with: scripts/export_csrnet_onnx.py
+  csrnet_onnx_path: ../../assets/csrnet.onnx
+  csrnet_input_size: [768, 1024]
+
+  # Fallback YOLO+tiles params (used only if you flip engine: yolo-tiles).
+  # YOLO undercounts heavily on dense night-time crowds — keep CSRNet on.
   yolo_model: yolov8x.pt
   yolo_conf: 0.10
   yolo_iou: 0.45
@@ -26,7 +29,3 @@ crowd:
   tile_grid_cols: 4
   tile_overlap: 0.20
   tile_inference_size: 1280
-
-  # If you switch engine: csrnet, set csrnet_onnx_path to a CSRNet ONNX file.
-  # csrnet_onnx_path: ../../assets/csrnet_shanghai_b.onnx
-  # csrnet_input_size: [768, 1024]

@@ -249,10 +249,11 @@ class _CsrnetEstimator:
 
         input_name = self.session.get_inputs()[0].name
         output = self.session.run(None, {input_name: chw.astype(np.float32)})[0]
-        density = output[0, 0]  # (H/8, W/8)
-        count = int(round(float(density.sum())))
+        density = output[0, 0]  # (H/8, W/8) — sum of pixels = estimated count
+        count = max(0, int(round(float(density.sum()))))
 
-        # Pretty visualization: heatmap overlaid on the resized frame
+        # Pretty visualization: upsample the density map to the input size
+        # (purely cosmetic — the count is the sum of the low-res map).
         density_vis = density / max(density.max(), 1e-6)
         density_vis = (density_vis * 255).astype(np.uint8)
         density_vis = cv2.resize(density_vis, (w_target, h_target))

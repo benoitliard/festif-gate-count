@@ -61,8 +61,42 @@ Chaque gate est piloté par un fichier YAML dans `packages/gate-agent/configs/`.
 | Mode | Description |
 |---|---|
 | `manual` | Mini-serveur HTTP avec boutons IN/OUT — idéal pour démo rapide ou tests fault-tolerance |
-| `video-file` | Lit un `.mp4` en boucle, OpenCV MOG2 + line-crossing |
-| `webcam` | Webcam Mac (index 0), OpenCV MOG2 + line-crossing direction-aware |
+| `video-file` | Lit un `.mp4` en boucle, OpenCV MOG2 ou YOLO + line-crossing |
+| `webcam` | Webcam Mac (USB ou built-in), OpenCV MOG2 ou YOLO + line-crossing |
+| `crowd-density` | Snapshot périodique → estimation **gauge** "il y a ≈14 800 devant la scène" |
+
+### Crowd-density avec CSRNet (recommandé pour foules denses)
+
+YOLO compte mal les foules très denses (têtes < 15 px, occlusion, contre-jour).
+Pour ce cas il faut un modèle "density map" comme CSRNet.
+
+```bash
+# 1. Télécharger des weights CSRNet pretrained (ShanghaiTech Part B)
+cd packages/gate-agent
+mkdir -p data
+curl -L -o data/partBmodel_best.pth.tar \
+  "https://huggingface.co/BedirYilmaz/crowdguessr-csrnet/resolve/main/partBmodel_best.pth.tar"
+
+# 2. Exporter en ONNX (single-file, ~62 MB)
+uv run python scripts/export_csrnet_onnx.py \
+  --weights data/partBmodel_best.pth.tar \
+  --output ../../assets/csrnet.onnx \
+  --input-size 768 1024
+
+# 3. Pointer une config crowd-density vers le modèle
+#    (configs/gate-crowd-stage.yaml en a déjà un exemple)
+
+# 4. Lancer
+pnpm gate:crowd-stage
+```
+
+L'inférence tourne sur **CoreML** (Apple Silicon) ou CPU — typiquement 200-500 ms par image.
+Le compte estimé apparaît dans la section **Foules** du dashboard, animé à chaque update.
+
+> ℹ️ CSRNet est entraîné sur ShanghaiTech B (foules urbaines diurnes). Il sous-compte
+> les festivals nocturnes très denses d'environ 30-50%. Pour de la précision
+> production, fine-tune sur un dataset festival ou applique un facteur de
+> calibration empirique mesuré sur place.
 
 Exemple de lancement webcam :
 
