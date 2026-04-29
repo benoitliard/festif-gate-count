@@ -6,6 +6,7 @@ import type { Broadcaster } from "./ws.js";
 const TOPIC_EVENTS = "gates/+/events";
 const TOPIC_STATUS = "gates/+/status";
 const TOPIC_HEARTBEAT = "gates/+/heartbeat";
+const TOPIC_CROWD = "gates/+/crowd";
 const TOPIC_EPOCH = "dashboard/control/epoch";
 
 export interface MqttBus {
@@ -28,7 +29,7 @@ export function startMqtt(opts: {
 
   client.on("connect", () => {
     log.info({ url }, "MQTT connected");
-    client.subscribe([TOPIC_EVENTS, TOPIC_STATUS, TOPIC_HEARTBEAT], { qos: 1 }, (err) => {
+    client.subscribe([TOPIC_EVENTS, TOPIC_STATUS, TOPIC_HEARTBEAT, TOPIC_CROWD], { qos: 1 }, (err) => {
       if (err) log.error({ err }, "MQTT subscribe failed");
     });
     // Re-publish current epoch retained so any newly-connected gate gets it.
@@ -78,6 +79,7 @@ function handleMessage(
     if (kind === "events") return handleEvent(gateId, raw, ctx);
     if (kind === "status") return handleStatus(gateId, raw, ctx);
     if (kind === "heartbeat") return handleHeartbeat(gateId, ctx);
+    if (kind === "crowd") return handleCrowd(gateId, raw, ctx);
   }
 }
 
@@ -133,6 +135,40 @@ function handleStatus(
   ctx.broadcaster.broadcast({
     type: "gate",
     gate: { gate_id: gateId, state, last_seen_at: now, preview_url: previewUrl },
+  });
+}
+
+function handleCrowd(
+  gateId: string,
+  raw: string,
+  ctx: { store: Store; broadcaster: Broadcaster; log: FastifyBaseLogger }
+) {
+  let parsed: { count?: number; ts?: string; confidence?: string; engine?: string };
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    ctx.log.warn({ topic: `gates/${gateId}/crowd` }, "Invalid crowd payload");
+    return;
+  }
+  if (typeof parsed.count !== "number" || !parsed.ts) {
+    ctx.log.warn({ parsed }, "Crowd payload missing count/ts");
+    return;
+  }
+  ctx.store.applyCrowdEstimate({
+    gate_id: gateId,
+    count: Math.max(0, Math.round(parsed.count)),
+    confidence: parsed.confidence ?? null,
+    engine: parsed.engine ?? null,
+    ts: parsed.ts,
+  });
+  ctx.store.touchGate(gateId, Date.now());
+  ctx.broadcaster.broadcast({
+    type: "crowd",
+    gateId,
+    count: Math.max(0, Math.round(parsed.count)),
+    confidence: parsed.confidence ?? null,
+    engine: parsed.engine ?? null,
+    ts: parsed.ts,
   });
 }
 

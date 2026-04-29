@@ -107,6 +107,24 @@ class MqttBus:
             retain=False,
         )
 
+    def publish_crowd(self, count: int, engine: str | None = None, confidence: str | None = None) -> None:
+        """Publish a crowd-density gauge reading. Retained so a late dashboard sees it."""
+        if not self._connected.is_set():
+            return
+        self.client.publish(
+            f"gates/{self.gate_id}/crowd",
+            payload=json.dumps(
+                {
+                    "count": int(count),
+                    "ts": _now_iso(),
+                    "engine": engine,
+                    "confidence": confidence,
+                }
+            ),
+            qos=1,
+            retain=True,
+        )
+
     # paho callbacks ---------------------------------------------------
 
     def _on_connect(self, client, userdata, flags, reason_code, properties=None):  # type: ignore[no-untyped-def]

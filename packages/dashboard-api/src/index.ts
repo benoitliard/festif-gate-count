@@ -36,6 +36,16 @@ async function main() {
 
   fastify.get("/api/history", async () => ({ days: store.getHistoryByDate() }));
 
+  fastify.get("/api/crowds", async () => ({ crowds: store.listCrowdLatest() }));
+
+  fastify.get<{ Params: { gateId: string }; Querystring: { limit?: string } }>(
+    "/api/crowds/:gateId/history",
+    async (req) => {
+      const limit = req.query.limit ? Math.min(1000, Math.max(1, Number(req.query.limit))) : 200;
+      return { history: store.getCrowdHistory(req.params.gateId, limit) };
+    }
+  );
+
   fastify.get("/api/triggers", async () => {
     const gates = store.listGates();
     return {

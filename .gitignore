@@ -32,3 +32,4 @@ yolov*.pt
 
 # claude code worktrees (local dev)
 .claude/worktrees/
+assets/*-annotated.*

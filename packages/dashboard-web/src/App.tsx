@@ -1,5 +1,6 @@
 import { useDashboardSocket } from "./hooks/useDashboardSocket";
 import { Counter } from "./components/Counter";
+import { CrowdSection } from "./components/CrowdSection";
 import { GateStatusList } from "./components/GateStatusList";
 import { HistorySection } from "./components/HistorySection";
 import { ResetButton } from "./components/ResetButton";
@@ -35,6 +36,15 @@ export function App() {
             epoch #{state.epoch}
           </span>
         </section>
+
+        {Object.keys(state.crowds).length > 0 && (
+          <section className="mb-8">
+            <h2 className="mb-2 text-xs font-semibold uppercase tracking-widest text-slate-400">
+              Foules ({Object.keys(state.crowds).length})
+            </h2>
+            <CrowdSection crowds={state.crowds} gates={state.gates} />
+          </section>
+        )}
 
         {/* Two-column layout on desktop: gates grid on the left, history on the right */}
         <div className="grid gap-8 md:grid-cols-[1fr_280px] lg:grid-cols-[1fr_320px]">

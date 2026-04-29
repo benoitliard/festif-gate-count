@@ -9,6 +9,7 @@ const initial: DashboardState = {
   net: 0,
   gates: [],
   gateTotals: {},
+  crowds: {},
   lastTickAt: 0,
   lastTickDirection: null,
   lastTickGateId: null,
@@ -75,6 +76,12 @@ function reduce(s: DashboardState, msg: ServerMsg): DashboardState {
   switch (msg.type) {
     case "snapshot": {
       const totalsMap = Object.fromEntries(msg.gateTotals.map((t) => [t.gate_id, t]));
+      const crowdsMap = Object.fromEntries(
+        msg.crowds.map((c) => [
+          c.gate_id,
+          { gate_id: c.gate_id, count: c.count, confidence: c.confidence, engine: c.engine, ts: c.ts },
+        ])
+      );
       return {
         ...s,
         epoch: msg.epoch,
@@ -83,6 +90,7 @@ function reduce(s: DashboardState, msg: ServerMsg): DashboardState {
         net: msg.net,
         gates: msg.gates,
         gateTotals: totalsMap,
+        crowds: crowdsMap,
       };
     }
     case "tick":
@@ -96,6 +104,21 @@ function reduce(s: DashboardState, msg: ServerMsg): DashboardState {
         lastTickDirection: msg.direction,
         lastTickGateId: msg.gateId,
       };
+    case "crowd": {
+      return {
+        ...s,
+        crowds: {
+          ...s.crowds,
+          [msg.gateId]: {
+            gate_id: msg.gateId,
+            count: msg.count,
+            confidence: msg.confidence,
+            engine: msg.engine,
+            ts: msg.ts,
+          },
+        },
+      };
+    }
     case "gate": {
       const others = s.gates.filter((g) => g.gate_id !== msg.gate.gate_id);
       return { ...s, gates: [...others, msg.gate].sort((a, b) => a.gate_id.localeCompare(b.gate_id)) };
@@ -108,6 +131,7 @@ function reduce(s: DashboardState, msg: ServerMsg): DashboardState {
         out: 0,
         net: 0,
         gateTotals: {},
+        // intentionally keep crowds: epoch resets are about gate counts, not crowd gauges
         lastTickAt: Date.now(),
         lastTickDirection: null,
         lastTickGateId: null,

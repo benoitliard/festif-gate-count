@@ -1,5 +1,5 @@
 import type { WebSocket } from "@fastify/websocket";
-import type { Snapshot, GateStatusRow, GateTotals } from "./store.js";
+import type { Snapshot, GateStatusRow, GateTotals, CrowdEstimate } from "./store.js";
 
 export type ServerMsg =
   | {
@@ -10,6 +10,7 @@ export type ServerMsg =
       net: number;
       gates: GateStatusRow[];
       gateTotals: GateTotals[];
+      crowds: CrowdEstimate[];
       updatedAt: number;
     }
   | {
@@ -20,6 +21,14 @@ export type ServerMsg =
       out: number;
       net: number;
       gateTotals: GateTotals;
+    }
+  | {
+      type: "crowd";
+      gateId: string;
+      count: number;
+      confidence: string | null;
+      engine: string | null;
+      ts: string;
     }
   | { type: "gate"; gate: GateStatusRow }
   | { type: "reset"; epoch: number };

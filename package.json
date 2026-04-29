@@ -13,6 +13,7 @@
     "gate:exit-2": "cd packages/gate-agent && uv run python -m gate_agent --config configs/gate-exit-2.yaml",
     "gate:webcam": "cd packages/gate-agent && uv run python -m gate_agent --config configs/gate-webcam.yaml",
     "gate:webcam-2": "cd packages/gate-agent && uv run python -m gate_agent --config configs/gate-webcam-2.yaml",
+    "gate:crowd-stage": "cd packages/gate-agent && uv run python -m gate_agent --config configs/gate-crowd-stage.yaml",
     "list-cameras": "cd packages/gate-agent && uv run python scripts/list_cameras.py",
     "broker:up": "docker compose up -d mosquitto",
     "broker:down": "docker compose down",

@@ -44,6 +44,12 @@ class GateRuntime:
             preview_url=self.preview.url if self.preview else None,
         )
 
+    # --- crowd ingestion (called by crowd-density source) ---
+
+    def publish_crowd(self, count: int, engine: str | None = None) -> None:
+        """Publish a snapshot crowd estimate. Retained so the dashboard sees the latest gauge."""
+        self.bus.publish_crowd(count=count, engine=engine)
+
     # --- event ingestion (called by sources) ---
 
     def ingest(self, direction: Direction) -> Optional[GateEvent]:

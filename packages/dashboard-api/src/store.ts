@@ -10,6 +10,15 @@ export interface GateEvent {
   epoch: number;
 }
 
+export interface CrowdEstimate {
+  gate_id: string;
+  count: number;
+  confidence: string | null;
+  engine: string | null;
+  ts: string;
+  applied_at: number;
+}
+
 export interface Snapshot {
   epoch: number;
   in: number;
@@ -17,6 +26,7 @@ export interface Snapshot {
   net: number;
   gates: GateStatusRow[];
   gateTotals: GateTotals[];
+  crowds: CrowdEstimate[];
   updatedAt: number;
 }
 
@@ -91,6 +101,24 @@ export class Store {
         key   TEXT PRIMARY KEY,
         value TEXT NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS crowd_latest (
+        gate_id      TEXT PRIMARY KEY,
+        count        INTEGER NOT NULL,
+        confidence   TEXT,
+        engine       TEXT,
+        ts           TEXT NOT NULL,
+        applied_at   INTEGER NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS crowd_history (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        gate_id      TEXT NOT NULL,
+        count        INTEGER NOT NULL,
+        confidence   TEXT,
+        engine       TEXT,
+        ts           TEXT NOT NULL,
+        applied_at   INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_crowd_history_gate ON crowd_history(gate_id, applied_at);
     `);
   }
 
@@ -228,6 +256,56 @@ export class Store {
       .all() as GateStatusRow[];
   }
 
+  // -- Crowd density gauges (snapshots, NOT counters) ---------------------
+
+  applyCrowdEstimate(input: {
+    gate_id: string;
+    count: number;
+    confidence?: string | null;
+    engine?: string | null;
+    ts: string;
+  }): { count: number; ts: string } {
+    const appliedAt = Date.now();
+    const tx = this.db.transaction(() => {
+      this.db
+        .prepare(
+          `INSERT INTO crowd_latest (gate_id, count, confidence, engine, ts, applied_at)
+           VALUES (?, ?, ?, ?, ?, ?)
+           ON CONFLICT(gate_id) DO UPDATE SET
+             count = excluded.count,
+             confidence = excluded.confidence,
+             engine = excluded.engine,
+             ts = excluded.ts,
+             applied_at = excluded.applied_at`
+        )
+        .run(input.gate_id, input.count, input.confidence ?? null, input.engine ?? null, input.ts, appliedAt);
+      this.db
+        .prepare(
+          `INSERT INTO crowd_history (gate_id, count, confidence, engine, ts, applied_at)
+           VALUES (?, ?, ?, ?, ?, ?)`
+        )
+        .run(input.gate_id, input.count, input.confidence ?? null, input.engine ?? null, input.ts, appliedAt);
+    });
+    tx();
+    return { count: input.count, ts: input.ts };
+  }
+
+  listCrowdLatest(): Array<{ gate_id: string; count: number; confidence: string | null; engine: string | null; ts: string; applied_at: number }> {
+    return this.db
+      .prepare(
+        "SELECT gate_id, count, confidence, engine, ts, applied_at FROM crowd_latest ORDER BY gate_id"
+      )
+      .all() as Array<{ gate_id: string; count: number; confidence: string | null; engine: string | null; ts: string; applied_at: number }>;
+  }
+
+  getCrowdHistory(gateId: string, limit = 200): Array<{ count: number; ts: string; applied_at: number }> {
+    return this.db
+      .prepare(
+        "SELECT count, ts, applied_at FROM crowd_history WHERE gate_id = ? ORDER BY applied_at DESC LIMIT ?"
+      )
+      .all(gateId, limit) as Array<{ count: number; ts: string; applied_at: number }>;
+  }
+
   /**
    * Aggregate counts per local-day from `events_seen` since the given epoch start
    * (or all-time if epoch is undefined). Returns rows sorted oldest → newest.
@@ -282,6 +360,7 @@ export class Store {
       net: totals.in - totals.out,
       gates: this.listGates(),
       gateTotals: this.getAllGateTotals(epoch),
+      crowds: this.listCrowdLatest(),
       updatedAt: Date.now(),
     };
   }

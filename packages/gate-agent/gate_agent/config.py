@@ -7,7 +7,7 @@ import yaml
 from pydantic import BaseModel, Field, field_validator
 
 
-SourceMode = Literal["manual", "video-file", "webcam"]
+SourceMode = Literal["manual", "video-file", "webcam", "crowd-density"]
 
 
 class LineConfig(BaseModel):
@@ -16,6 +16,37 @@ class LineConfig(BaseModel):
     a: tuple[int, int]
     b: tuple[int, int]
     in_side: Literal["positive", "negative"] = "positive"
+
+
+class CrowdDensityConfig(BaseModel):
+    """Snapshot-based crowd estimation. Gauge, not counter."""
+
+    engine: Literal["yolo-tiles", "csrnet"] = "yolo-tiles"
+
+    # Cadence
+    snapshot_interval_seconds: float = 30.0
+
+    # Source video
+    source: Literal["webcam", "video-file", "rtsp", "image-file"] = "webcam"
+    webcam_index: int = 0
+    video_path: str | None = None
+    rtsp_url: str | None = None
+    image_path: str | None = None  # for offline dry-run with a still
+
+    # YOLO+tiles params (works fine for dense-but-finite crowds)
+    yolo_model: str = "yolov8x.pt"  # x is heaviest, best on small heads in crowds
+    yolo_conf: float = 0.18
+    yolo_iou: float = 0.45
+    yolo_classes: list[int] = [0]
+    yolo_device: str | None = None
+    tile_grid_rows: int = 3
+    tile_grid_cols: int = 3
+    tile_overlap: float = 0.15  # fraction of tile size, drops dupes near borders
+    tile_inference_size: int = 1024  # YOLO imgsz; bigger = sees smaller heads
+
+    # CSRNet (if engine == 'csrnet'). The user supplies an ONNX path.
+    csrnet_onnx_path: str | None = None
+    csrnet_input_size: tuple[int, int] = (768, 1024)  # (h, w)
 
 
 class TrackingConfig(BaseModel):
@@ -66,6 +97,9 @@ class GateConfig(BaseModel):
 
     # tracking (used by video-file and webcam)
     tracking: TrackingConfig | None = None
+
+    # crowd-density (used by crowd-density mode)
+    crowd: CrowdDensityConfig | None = None
 
     # MJPEG preview server (optional, used by webcam and video-file modes)
     preview_port: int | None = None

@@ -1,0 +1,29 @@
+gate_id: stage-main
+role: bidirectional
+mode: crowd-density
+mqtt_url: mqtt://localhost:1884
+mqtt_keepalive: 10
+heartbeat_seconds: 5
+epoch_wait_seconds: 2
+db_path: data/{gate_id}.db
+preview_port: 8601
+
+crowd:
+  engine: yolo-tiles
+  snapshot_interval_seconds: 8     # for the demo; bump to 30-60 in production
+  source: image-file               # offline dry-run with a still
+  image_path: ../../assets/crowd-sample.jpg
+
+  # YOLO+tiles params: 3x3 grid with 15% overlap, large imgsz to see small heads
+  yolo_model: yolov8x.pt
+  yolo_conf: 0.18
+  yolo_iou: 0.45
+  yolo_classes: [0]
+  tile_grid_rows: 3
+  tile_grid_cols: 3
+  tile_overlap: 0.15
+  tile_inference_size: 1280
+
+  # If you switch engine: csrnet, set csrnet_onnx_path to a CSRNet ONNX file.
+  # csrnet_onnx_path: ../../assets/csrnet_shanghai_b.onnx
+  # csrnet_input_size: [768, 1024]

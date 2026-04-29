@@ -11,7 +11,8 @@ from .runtime import GateRuntime
 from .sources.base import EventSource
 
 
-def _build_source(cfg: GateConfig, preview: PreviewServer | None) -> EventSource:
+def _build_source(cfg: GateConfig, runtime) -> EventSource:
+    preview = runtime.preview
     if cfg.mode == "manual":
         from .sources.manual import ManualSource
 
@@ -28,6 +29,17 @@ def _build_source(cfg: GateConfig, preview: PreviewServer | None) -> EventSource
         from .sources.webcam import WebcamSource
 
         return WebcamSource(index=cfg.webcam_index, tracking=cfg.tracking, preview=preview)
+    if cfg.mode == "crowd-density":
+        if not cfg.crowd:
+            raise SystemExit("crowd-density mode requires a `crowd:` block in config")
+        from .sources.crowd_density import CrowdDensitySource
+
+        return CrowdDensitySource(
+            gate_id=cfg.gate_id,
+            cfg=cfg.crowd,
+            publish_crowd=runtime.publish_crowd,
+            preview=preview,
+        )
     raise SystemExit(f"Unknown mode: {cfg.mode}")
 
 
@@ -51,7 +63,7 @@ def main(argv: list[str] | None = None) -> int:
     logging.info("Starting gate %s (mode=%s)", cfg.gate_id, cfg.mode)
 
     runtime = GateRuntime(cfg)
-    source = _build_source(cfg, preview=runtime.preview)
+    source = _build_source(cfg, runtime)
     runtime.run(source)
     return 0
 

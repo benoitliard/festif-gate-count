@@ -15,6 +15,14 @@ export interface DayTotal {
   events: number;
 }
 
+export interface CrowdEstimate {
+  gate_id: string;
+  count: number;
+  confidence: string | null;
+  engine: string | null;
+  ts: string;
+}
+
 export interface GateTotals {
   gate_id: string;
   in: number;
@@ -30,6 +38,7 @@ export type ServerMsg =
       net: number;
       gates: GateStatus[];
       gateTotals: GateTotals[];
+      crowds: (CrowdEstimate & { applied_at: number })[];
       updatedAt: number;
     }
   | {
@@ -40,6 +49,14 @@ export type ServerMsg =
       out: number;
       net: number;
       gateTotals: GateTotals;
+    }
+  | {
+      type: "crowd";
+      gateId: string;
+      count: number;
+      confidence: string | null;
+      engine: string | null;
+      ts: string;
     }
   | { type: "gate"; gate: GateStatus }
   | { type: "reset"; epoch: number };
@@ -52,6 +69,7 @@ export interface DashboardState {
   net: number;
   gates: GateStatus[];
   gateTotals: Record<string, GateTotals>;
+  crowds: Record<string, CrowdEstimate>;
   lastTickAt: number;
   lastTickDirection: "in" | "out" | null;
   lastTickGateId: string | null;
