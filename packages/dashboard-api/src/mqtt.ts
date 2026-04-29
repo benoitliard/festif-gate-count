@@ -109,6 +109,7 @@ function handleEvent(
       in: result.totals.in,
       out: result.totals.out,
       net: result.totals.in - result.totals.out,
+      gateTotals: result.gateTotals,
     });
   }
 }

@@ -1,22 +1,15 @@
-import type { GateStatus } from "../types";
+import type { GateStatus, GateTotals } from "../types";
+import { GateCard } from "./GateCard";
 
 interface Props {
   gates: GateStatus[];
+  gateTotals: Record<string, GateTotals>;
+  lastTickAt: number;
+  lastTickGateId: string | null;
+  lastTickDirection: "in" | "out" | null;
 }
 
-const stateLabel: Record<GateStatus["state"], string> = {
-  online: "En ligne",
-  stale: "Latence",
-  offline: "Hors ligne",
-};
-
-const dotClass: Record<GateStatus["state"], string> = {
-  online: "bg-emerald-400 shadow-emerald-400/40",
-  stale: "bg-amber-400 shadow-amber-400/40",
-  offline: "bg-rose-500 shadow-rose-500/40",
-};
-
-export function GateStatusList({ gates }: Props) {
+export function GateStatusList({ gates, gateTotals, lastTickAt, lastTickGateId, lastTickDirection }: Props) {
   if (gates.length === 0) {
     return (
       <div className="rounded-2xl border border-slate-800 bg-slate-900/40 px-4 py-3 text-center text-sm text-slate-400">
@@ -24,20 +17,29 @@ export function GateStatusList({ gates }: Props) {
       </div>
     );
   }
+  // include any gates that have totals but no status row (defensive)
+  const knownIds = new Set(gates.map((g) => g.gate_id));
+  const phantomGates = Object.keys(gateTotals).filter((id) => !knownIds.has(id));
+  const allRows = [
+    ...gates,
+    ...phantomGates.map<GateStatus>((id) => ({ gate_id: id, state: "offline", last_seen_at: 0 })),
+  ];
+
   return (
-    <ul className="flex flex-col gap-2">
-      {gates.map((g) => (
-        <li
-          key={g.gate_id}
-          className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2"
-        >
-          <div className="flex items-center gap-3">
-            <span className={`h-2.5 w-2.5 rounded-full shadow-[0_0_10px] ${dotClass[g.state]}`} />
-            <span className="font-mono text-sm text-slate-100">{g.gate_id}</span>
-          </div>
-          <span className="text-xs uppercase tracking-wider text-slate-400">{stateLabel[g.state]}</span>
-        </li>
-      ))}
-    </ul>
+    <div className="grid grid-cols-1 gap-2">
+      {allRows.map((g) => {
+        const isHighlight = g.gate_id === lastTickGateId && Date.now() - lastTickAt < 1500;
+        return (
+          <GateCard
+            key={g.gate_id}
+            status={g}
+            totals={gateTotals[g.gate_id]}
+            highlight={isHighlight}
+            highlightAt={lastTickAt}
+            highlightDirection={lastTickDirection}
+          />
+        );
+      })}
+    </div>
   );
 }

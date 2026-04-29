@@ -16,6 +16,7 @@ export interface Snapshot {
   out: number;
   net: number;
   gates: GateStatusRow[];
+  gateTotals: GateTotals[];
   updatedAt: number;
 }
 
@@ -25,9 +26,16 @@ export interface GateStatusRow {
   last_seen_at: number;
 }
 
+export interface GateTotals {
+  gate_id: string;
+  in: number;
+  out: number;
+}
+
 export interface ApplyResult {
   applied: boolean;
   totals: { in: number; out: number };
+  gateTotals: GateTotals;
 }
 
 export class Store {
@@ -70,6 +78,13 @@ export class Store {
         state          TEXT NOT NULL,
         last_seen_at   INTEGER NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS gate_totals (
+        epoch       INTEGER NOT NULL,
+        gate_id     TEXT NOT NULL,
+        in_count    INTEGER NOT NULL DEFAULT 0,
+        out_count   INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (epoch, gate_id)
+      );
       CREATE TABLE IF NOT EXISTS meta (
         key   TEXT PRIMARY KEY,
         value TEXT NOT NULL
@@ -102,7 +117,8 @@ export class Store {
     if (evt.epoch < currentEpoch) {
       // Stale event from a prior epoch (pre-reset). Ignore silently.
       const totals = this.getTotals(currentEpoch);
-      return { applied: false, totals };
+      const gateTotals = this.getGateTotal(currentEpoch, evt.gate_id);
+      return { applied: false, totals, gateTotals };
     }
     const tx = this.db.transaction(() => {
       const insert = this.db
@@ -115,10 +131,36 @@ export class Store {
       this.db
         .prepare(`UPDATE totals SET ${col} = ${col} + 1, updated_at = ? WHERE epoch = ?`)
         .run(Date.now(), currentEpoch);
+      // Per-gate totals (upsert)
+      this.db
+        .prepare(
+          `INSERT INTO gate_totals (epoch, gate_id, in_count, out_count) VALUES (?, ?, ?, ?)
+           ON CONFLICT(epoch, gate_id) DO UPDATE SET ${col} = ${col} + 1`
+        )
+        .run(currentEpoch, evt.gate_id, evt.direction === "in" ? 1 : 0, evt.direction === "out" ? 1 : 0);
       return true;
     });
     const applied = tx();
-    return { applied, totals: this.getTotals(currentEpoch) };
+    return {
+      applied,
+      totals: this.getTotals(currentEpoch),
+      gateTotals: this.getGateTotal(currentEpoch, evt.gate_id),
+    };
+  }
+
+  getGateTotal(epoch: number, gateId: string): GateTotals {
+    const row = this.db
+      .prepare("SELECT in_count, out_count FROM gate_totals WHERE epoch = ? AND gate_id = ?")
+      .get(epoch, gateId) as { in_count: number; out_count: number } | undefined;
+    return { gate_id: gateId, in: row?.in_count ?? 0, out: row?.out_count ?? 0 };
+  }
+
+  getAllGateTotals(epoch: number): GateTotals[] {
+    return this.db
+      .prepare(
+        "SELECT gate_id, in_count AS \"in\", out_count AS \"out\" FROM gate_totals WHERE epoch = ? ORDER BY gate_id"
+      )
+      .all(epoch) as GateTotals[];
   }
 
   getTotals(epoch: number): { in: number; out: number } {
@@ -192,6 +234,7 @@ export class Store {
       out: totals.out,
       net: totals.in - totals.out,
       gates: this.listGates(),
+      gateTotals: this.getAllGateTotals(epoch),
       updatedAt: Date.now(),
     };
   }

@@ -8,8 +8,10 @@ const initial: DashboardState = {
   out: 0,
   net: 0,
   gates: [],
+  gateTotals: {},
   lastTickAt: 0,
   lastTickDirection: null,
+  lastTickGateId: null,
 };
 
 const BACKOFF_MS = [1000, 2000, 5000, 10000, 10000];
@@ -71,7 +73,8 @@ export function useDashboardSocket(): DashboardState {
 
 function reduce(s: DashboardState, msg: ServerMsg): DashboardState {
   switch (msg.type) {
-    case "snapshot":
+    case "snapshot": {
+      const totalsMap = Object.fromEntries(msg.gateTotals.map((t) => [t.gate_id, t]));
       return {
         ...s,
         epoch: msg.epoch,
@@ -79,22 +82,36 @@ function reduce(s: DashboardState, msg: ServerMsg): DashboardState {
         out: msg.out,
         net: msg.net,
         gates: msg.gates,
+        gateTotals: totalsMap,
       };
+    }
     case "tick":
       return {
         ...s,
         in: msg.in,
         out: msg.out,
         net: msg.net,
+        gateTotals: { ...s.gateTotals, [msg.gateTotals.gate_id]: msg.gateTotals },
         lastTickAt: Date.now(),
         lastTickDirection: msg.direction,
+        lastTickGateId: msg.gateId,
       };
     case "gate": {
       const others = s.gates.filter((g) => g.gate_id !== msg.gate.gate_id);
       return { ...s, gates: [...others, msg.gate].sort((a, b) => a.gate_id.localeCompare(b.gate_id)) };
     }
     case "reset":
-      return { ...s, epoch: msg.epoch, in: 0, out: 0, net: 0, lastTickAt: Date.now(), lastTickDirection: null };
+      return {
+        ...s,
+        epoch: msg.epoch,
+        in: 0,
+        out: 0,
+        net: 0,
+        gateTotals: {},
+        lastTickAt: Date.now(),
+        lastTickDirection: null,
+        lastTickGateId: null,
+      };
     default:
       return s;
   }

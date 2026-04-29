@@ -39,7 +39,13 @@ export function App() {
           <h2 className="mb-2 text-xs font-semibold uppercase tracking-widest text-slate-400">
             Gates ({state.gates.length})
           </h2>
-          <GateStatusList gates={state.gates} />
+          <GateStatusList
+            gates={state.gates}
+            gateTotals={state.gateTotals}
+            lastTickAt={state.lastTickAt}
+            lastTickGateId={state.lastTickGateId}
+            lastTickDirection={state.lastTickDirection}
+          />
         </section>
 
         <section className="mt-auto">

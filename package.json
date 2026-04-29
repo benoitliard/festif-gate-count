@@ -4,13 +4,14 @@
   "version": "0.1.0",
   "description": "Festival gate counter POC: MQTT + computer vision + realtime dashboard",
   "scripts": {
-    "dev": "concurrently -n api,web,gA,gB,gC,gD -c yellow,cyan,green,green,magenta,magenta \"pnpm --filter dashboard-api dev\" \"pnpm --filter dashboard-web dev\" \"pnpm gate:entry-1\" \"pnpm gate:entry-2\" \"pnpm gate:exit-1\" \"pnpm gate:exit-2\"",
+    "dev": "concurrently -n api,web,gA,gB,gC,gD,cam -c yellow,cyan,green,green,magenta,magenta,blue \"pnpm --filter dashboard-api dev\" \"pnpm --filter dashboard-web dev\" \"pnpm gate:entry-1\" \"pnpm gate:entry-2\" \"pnpm gate:exit-1\" \"pnpm gate:exit-2\" \"pnpm gate:webcam\"",
     "dev:api": "pnpm --filter dashboard-api dev",
     "dev:web": "pnpm --filter dashboard-web dev",
     "gate:entry-1": "cd packages/gate-agent && uv run python -m gate_agent --config configs/gate-entry-1.yaml",
     "gate:entry-2": "cd packages/gate-agent && uv run python -m gate_agent --config configs/gate-entry-2.yaml",
     "gate:exit-1": "cd packages/gate-agent && uv run python -m gate_agent --config configs/gate-exit-1.yaml",
     "gate:exit-2": "cd packages/gate-agent && uv run python -m gate_agent --config configs/gate-exit-2.yaml",
+    "gate:webcam": "cd packages/gate-agent && uv run python -m gate_agent --config configs/gate-webcam.yaml",
     "broker:up": "docker compose up -d mosquitto",
     "broker:down": "docker compose down",
     "broker:reset": "docker compose down -v && docker compose up -d mosquitto"

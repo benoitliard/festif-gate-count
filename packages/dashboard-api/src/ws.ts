@@ -1,9 +1,26 @@
 import type { WebSocket } from "@fastify/websocket";
-import type { Snapshot, GateStatusRow } from "./store.js";
+import type { Snapshot, GateStatusRow, GateTotals } from "./store.js";
 
 export type ServerMsg =
-  | { type: "snapshot"; epoch: number; in: number; out: number; net: number; gates: GateStatusRow[]; updatedAt: number }
-  | { type: "tick"; gateId: string; direction: "in" | "out"; in: number; out: number; net: number }
+  | {
+      type: "snapshot";
+      epoch: number;
+      in: number;
+      out: number;
+      net: number;
+      gates: GateStatusRow[];
+      gateTotals: GateTotals[];
+      updatedAt: number;
+    }
+  | {
+      type: "tick";
+      gateId: string;
+      direction: "in" | "out";
+      in: number;
+      out: number;
+      net: number;
+      gateTotals: GateTotals;
+    }
   | { type: "gate"; gate: GateStatusRow }
   | { type: "reset"; epoch: number };
 

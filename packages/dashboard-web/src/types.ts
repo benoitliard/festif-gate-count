@@ -6,6 +6,12 @@ export interface GateStatus {
   last_seen_at: number;
 }
 
+export interface GateTotals {
+  gate_id: string;
+  in: number;
+  out: number;
+}
+
 export type ServerMsg =
   | {
       type: "snapshot";
@@ -14,6 +20,7 @@ export type ServerMsg =
       out: number;
       net: number;
       gates: GateStatus[];
+      gateTotals: GateTotals[];
       updatedAt: number;
     }
   | {
@@ -23,6 +30,7 @@ export type ServerMsg =
       in: number;
       out: number;
       net: number;
+      gateTotals: GateTotals;
     }
   | { type: "gate"; gate: GateStatus }
   | { type: "reset"; epoch: number };
@@ -34,6 +42,8 @@ export interface DashboardState {
   out: number;
   net: number;
   gates: GateStatus[];
+  gateTotals: Record<string, GateTotals>;
   lastTickAt: number;
   lastTickDirection: "in" | "out" | null;
+  lastTickGateId: string | null;
 }
