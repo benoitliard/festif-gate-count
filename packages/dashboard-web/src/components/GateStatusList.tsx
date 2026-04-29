@@ -26,7 +26,7 @@ export function GateStatusList({ gates, gateTotals, lastTickAt, lastTickGateId, 
   ];
 
   return (
-    <div className="grid grid-cols-1 gap-2">
+    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-3 xl:grid-cols-3">
       {allRows.map((g) => {
         const isHighlight = g.gate_id === lastTickGateId && Date.now() - lastTickAt < 1500;
         return (
