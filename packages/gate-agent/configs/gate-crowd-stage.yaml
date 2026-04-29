@@ -12,16 +12,19 @@ crowd:
   engine: yolo-tiles
   snapshot_interval_seconds: 8     # for the demo; bump to 30-60 in production
   source: image-file               # offline dry-run with a still
-  image_path: ../../assets/crowd-sample.jpg
+  image_path: ../../assets/festival-night.jpg
 
-  # YOLO+tiles params: 3x3 grid with 15% overlap, large imgsz to see small heads
+  # YOLO+tiles params. Aggressive defaults: 4x4 grid, 20% overlap, low conf
+  # threshold to catch tiny heads in crowd photos. Even so, YOLO undercounts
+  # heavily on dense night-time festival shots — switch to engine: csrnet for
+  # production accuracy. See README for ONNX export instructions.
   yolo_model: yolov8x.pt
-  yolo_conf: 0.18
+  yolo_conf: 0.10
   yolo_iou: 0.45
   yolo_classes: [0]
-  tile_grid_rows: 3
-  tile_grid_cols: 3
-  tile_overlap: 0.15
+  tile_grid_rows: 4
+  tile_grid_cols: 4
+  tile_overlap: 0.20
   tile_inference_size: 1280
 
   # If you switch engine: csrnet, set csrnet_onnx_path to a CSRNet ONNX file.
