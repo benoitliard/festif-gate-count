@@ -17,9 +17,10 @@ log = logging.getLogger(__name__)
 def _build_app(gate_id: str, ingest: IngestFn, role: str) -> FastAPI:
     app = FastAPI(title=f"Gate {gate_id}", docs_url=None, redoc_url=None)
 
-    allowed: tuple[Direction, ...] = (
-        ("in",) if role == "entry" else ("out",) if role == "exit" else ("in", "out")
-    )
+    # Manual pads always offer both directions — the operator counts whoever
+    # walks past, regardless of where the gate is physically placed. The
+    # `role` is kept as a label only.
+    allowed: tuple[Direction, ...] = ("in", "out")
 
     @app.get("/manifest.webmanifest")
     def manifest():
@@ -42,18 +43,20 @@ def _build_app(gate_id: str, ingest: IngestFn, role: str) -> FastAPI:
 
     @app.get("/icon.svg")
     def icon():
-        accent = "#34d399" if "in" in allowed else "#fbbf24"
-        svg = f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="96" fill="#0f172a"/><circle cx="256" cy="256" r="120" fill="none" stroke="{accent}" stroke-width="24"/><text x="256" y="306" font-family="ui-monospace, monospace" font-size="180" font-weight="700" text-anchor="middle" fill="#f1f5f9">{"↑" if "in" in allowed else "↓"}</text></svg>"""
+        svg = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="96" fill="#0f172a"/><circle cx="256" cy="256" r="120" fill="none" stroke="#34d399" stroke-width="20"/><text x="170" y="290" font-family="ui-monospace, monospace" font-size="120" font-weight="800" text-anchor="middle" fill="#34d399">↑</text><text x="342" y="290" font-family="ui-monospace, monospace" font-size="120" font-weight="800" text-anchor="middle" fill="#fbbf24">↓</text></svg>"""
         return HTMLResponse(content=svg, media_type="image/svg+xml")
 
     @app.get("/", response_class=HTMLResponse)
     def index() -> str:
         buttons_html = ""
         for d in allowed:
-            label = "ENTRÉE ↑" if d == "in" else "SORTIE ↓"
+            label = "ENTRÉE" if d == "in" else "SORTIE"
+            arrow = "↑" if d == "in" else "↓"
             buttons_html += f"""
             <button data-dir="{d}" class="dir-btn dir-{d}">
-              {label}
+              <span class="arrow">{arrow}</span>
+              <span class="label">{label}</span>
+              <span class="count" data-count="{d}">0</span>
             </button>"""
         return f"""<!doctype html>
 <html lang="fr">
@@ -90,30 +93,58 @@ def _build_app(gate_id: str, ingest: IngestFn, role: str) -> FastAPI:
     .role {{ font-size: 0.7rem; letter-spacing: 0.2em; text-transform: uppercase; color: #94a3b8; }}
     .buttons {{
       display: grid;
-      grid-template-columns: 1fr;
-      gap: 16px;
+      grid-template-rows: 1fr 1fr;
+      gap: 14px;
       flex: 1;
     }}
     .dir-btn {{
       border: none;
       border-radius: 24px;
-      padding: 32px;
-      font-size: 1.8rem;
-      font-weight: 800;
-      letter-spacing: 0.05em;
+      padding: 24px;
       cursor: pointer;
-      transition: transform 0.06s ease, box-shadow 0.2s ease;
+      transition: transform 0.06s ease, box-shadow 0.2s ease, filter 0.15s ease;
       color: #0f172a;
       touch-action: manipulation;
+      display: grid;
+      grid-template-areas:
+        "arrow label"
+        "arrow count";
+      grid-template-columns: auto 1fr;
+      grid-template-rows: auto auto;
+      align-items: center;
+      gap: 0 16px;
+      text-align: left;
     }}
-    .dir-btn:active {{ transform: scale(0.98); }}
-    .dir-in {{ background: #34d399; box-shadow: 0 14px 28px -10px rgba(52, 211, 153, 0.6); }}
-    .dir-out {{ background: #fbbf24; box-shadow: 0 14px 28px -10px rgba(251, 191, 36, 0.6); }}
+    .dir-btn:active {{ transform: scale(0.985); filter: brightness(1.08); }}
+    .dir-in {{ background: #34d399; box-shadow: 0 14px 28px -10px rgba(52, 211, 153, 0.5); }}
+    .dir-out {{ background: #fbbf24; box-shadow: 0 14px 28px -10px rgba(251, 191, 36, 0.5); }}
+    .arrow {{
+      grid-area: arrow;
+      font-size: 4.5rem;
+      font-weight: 900;
+      line-height: 1;
+    }}
+    .label {{
+      grid-area: label;
+      font-size: 1.6rem;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      align-self: end;
+    }}
+    .count {{
+      grid-area: count;
+      font-family: ui-monospace, monospace;
+      font-variant-numeric: tabular-nums;
+      font-size: 1.05rem;
+      font-weight: 700;
+      opacity: 0.7;
+      align-self: start;
+    }}
     .log {{
       font-family: ui-monospace, monospace;
-      font-size: 0.8rem;
+      font-size: 0.75rem;
       color: #64748b;
-      min-height: 18px;
+      min-height: 16px;
       text-align: center;
     }}
   </style>
@@ -127,16 +158,35 @@ def _build_app(gate_id: str, ingest: IngestFn, role: str) -> FastAPI:
   <div class="log" id="log">prêt</div>
   <script>
     const log = document.getElementById('log');
+    const STORAGE_KEY = 'gate-counter:local:{gate_id}';
+    const local = {{ in: 0, out: 0, ...JSON.parse(localStorage.getItem(STORAGE_KEY) || '{{}}') }};
+
+    function refreshCounts() {{
+      document.querySelectorAll('.count').forEach(span => {{
+        const dir = span.dataset.count;
+        span.textContent = local[dir] || 0;
+      }});
+    }}
+    refreshCounts();
+
     document.querySelectorAll('.dir-btn').forEach(btn => {{
       btn.addEventListener('click', async () => {{
         const dir = btn.dataset.dir;
-        if (navigator.vibrate) navigator.vibrate(8);
+        if (navigator.vibrate) navigator.vibrate(10);
+        // Optimistic local count
+        local[dir] = (local[dir] || 0) + 1;
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(local));
+        refreshCounts();
         try {{
           const r = await fetch('/trigger/' + dir, {{ method: 'POST' }});
           if (!r.ok) throw new Error('HTTP ' + r.status);
           const data = await r.json();
-          log.textContent = dir + ' ✓ ' + (data.event_id || '');
+          log.textContent = dir + ' ✓ ' + (data.event_id || '').slice(-6);
         }} catch (err) {{
+          // Roll back local count on failure
+          local[dir] = Math.max(0, (local[dir] || 0) - 1);
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(local));
+          refreshCounts();
           log.textContent = 'ERROR: ' + err.message;
         }}
       }});
