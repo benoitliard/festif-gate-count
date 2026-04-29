@@ -9,14 +9,16 @@ db_path: data/{gate_id}.db
 webcam_index: 0
 preview_port: 8501
 tracking:
-  min_area: 1500
-  max_distance: 80
-  max_age_frames: 30
+  engine: yolo
   cooldown_seconds: 1.0
-  downscale_width: 640
-  learning_rate: -1.0
-  var_threshold: 32.0
+  downscale_width: 960          # higher res helps YOLO see distant people
+  yolo_model: yolov8n.pt        # nano = fast; switch to yolov8s.pt or yolov8m.pt for crowds
+  yolo_conf: 0.4
+  yolo_iou: 0.5
+  # yolo_device: mps            # uncomment to force Apple Silicon GPU; auto-detected by default
+  yolo_classes: [0]             # COCO class 0 = person
   line:
-    a: [320, 0]
-    b: [320, 720]
+    a: [480, 0]
+    b: [480, 720]
     in_side: positive
+

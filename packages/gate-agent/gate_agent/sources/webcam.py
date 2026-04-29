@@ -11,7 +11,7 @@ import cv2
 from ..config import TrackingConfig
 from ..preview import PreviewServer
 from .base import IngestFn
-from .tracking import CrossingTracker
+from .tracker_factory import build_tracker
 
 log = logging.getLogger(__name__)
 
@@ -52,7 +52,7 @@ class WebcamSource:
         reader_thread.start()
         log.info("Webcam source up (index=%d). First frame may take a moment due to permission prompt.", self.index)
 
-        tracker = CrossingTracker(self.tracking)
+        tracker = build_tracker(self.tracking)
         try:
             while not stop.is_set():
                 try:

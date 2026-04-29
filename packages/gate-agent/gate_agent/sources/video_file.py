@@ -11,7 +11,7 @@ import cv2
 from ..config import TrackingConfig
 from ..preview import PreviewServer
 from .base import IngestFn
-from .tracking import CrossingTracker
+from .tracker_factory import build_tracker
 
 log = logging.getLogger(__name__)
 
@@ -27,7 +27,7 @@ class VideoFileSource:
         if not self.path.exists():
             log.error("Video file not found: %s", self.path)
             return
-        tracker = CrossingTracker(self.tracking)
+        tracker = build_tracker(self.tracking)
         cap = cv2.VideoCapture(str(self.path))
         fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
         delay = 1.0 / fps

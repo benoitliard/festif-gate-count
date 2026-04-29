@@ -1,34 +1,36 @@
+"""MOG2 background-subtraction tracker. Cheap, runs on Pi, but noisy on
+front-facing webcams or scenes where everything moves a little. For real
+people-counting use the `yolo` engine instead."""
+
 from __future__ import annotations
 
 import logging
-import time
 from dataclasses import dataclass, field
-from typing import Iterable
 
 import cv2
 import numpy as np
 
-from ..config import LineConfig, TrackingConfig
+from ..config import TrackingConfig
+from .line_crossing import LineCrossingDetector
 
 log = logging.getLogger(__name__)
 
 
 @dataclass
-class Track:
+class _Mog2Track:
     track_id: int
     centroid: tuple[int, int]
-    last_side: int  # -1, 0, +1
     last_seen_frame: int
-    last_crossing_at: float = 0.0
 
 
 @dataclass
 class CrossingTracker:
-    """MOG2 + centroid tracker + line-crossing direction detection."""
+    """MOG2 + greedy centroid tracker + shared line-crossing detector."""
 
     cfg: TrackingConfig
     bg: cv2.BackgroundSubtractor = field(init=False)
-    tracks: dict[int, Track] = field(default_factory=dict)
+    detector: LineCrossingDetector = field(init=False)
+    tracks: dict[int, _Mog2Track] = field(default_factory=dict)
     next_id: int = 1
     frame_counter: int = 0
 
@@ -38,9 +40,9 @@ class CrossingTracker:
             varThreshold=self.cfg.var_threshold,
             detectShadows=False,
         )
+        self.detector = LineCrossingDetector(line=self.cfg.line, cooldown_seconds=self.cfg.cooldown_seconds)
 
     def process(self, frame: np.ndarray) -> tuple[np.ndarray, list[str]]:
-        """Process a frame; return annotated frame and a list of new crossings ('in' or 'out')."""
         self.frame_counter += 1
 
         # Downscale to target width
@@ -66,21 +68,20 @@ class CrossingTracker:
             centroids.append((cx, cy))
             cv2.rectangle(frame, (x, y), (x + cw, y + ch), (0, 200, 255), 2)
 
-        # Update tracks
         crossings = self._update_tracks(centroids, frame)
 
         # Draw line
         ax, ay = self.cfg.line.a
         bx, by = self.cfg.line.b
         cv2.line(frame, (ax, ay), (bx, by), (255, 80, 80), 2)
+        cv2.putText(frame, "MOG2", (10, 22), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 1, cv2.LINE_AA)
 
         return frame, crossings
 
     def _update_tracks(self, detections: list[tuple[int, int]], frame: np.ndarray) -> list[str]:
         crossings: list[str] = []
-        # Greedy nearest-neighbor association
         unmatched = set(self.tracks.keys())
-        used = set()
+        used: set[int] = set()
         for det in detections:
             best_id = None
             best_dist = self.cfg.max_distance
@@ -99,14 +100,10 @@ class CrossingTracker:
                 self._create_track(det)
 
         # Drop stale tracks
-        stale = []
-        for tid, t in self.tracks.items():
-            if tid in used:
-                continue
-            if self.frame_counter - t.last_seen_frame > self.cfg.max_age_frames:
-                stale.append(tid)
+        stale = [tid for tid, t in self.tracks.items() if tid not in used and self.frame_counter - t.last_seen_frame > self.cfg.max_age_frames]
         for tid in stale:
             del self.tracks[tid]
+            self.detector.forget(tid)
 
         # Annotate active tracks
         for t in self.tracks.values():
@@ -117,45 +114,20 @@ class CrossingTracker:
         return crossings
 
     def _create_track(self, centroid: tuple[int, int]) -> None:
-        side = self._side_of_line(centroid)
-        self.tracks[self.next_id] = Track(
+        self.tracks[self.next_id] = _Mog2Track(
             track_id=self.next_id,
             centroid=centroid,
-            last_side=side,
             last_seen_frame=self.frame_counter,
         )
+        # Prime the line-crossing detector with initial side
+        self.detector.update(self.next_id, centroid)
         self.next_id += 1
 
     def _move_track(self, tid: int, centroid: tuple[int, int], crossings: list[str]) -> None:
         t = self.tracks[tid]
-        new_side = self._side_of_line(centroid)
-        now = time.time()
-        if (
-            t.last_side != 0
-            and new_side != 0
-            and new_side != t.last_side
-            and (now - t.last_crossing_at) > self.cfg.cooldown_seconds
-        ):
-            # Direction
-            in_pos = self.cfg.line.in_side == "positive"
-            if new_side > 0:
-                direction = "in" if in_pos else "out"
-            else:
-                direction = "out" if in_pos else "in"
-            crossings.append(direction)
-            t.last_crossing_at = now
-            log.info("Crossing detected: %s (track %d)", direction, tid)
+        crossing = self.detector.update(tid, centroid)
+        if crossing is not None:
+            crossings.append(crossing)
+            log.info("Crossing detected (mog2): %s (track %d)", crossing, tid)
         t.centroid = centroid
-        if new_side != 0:
-            t.last_side = new_side
         t.last_seen_frame = self.frame_counter
-
-    def _side_of_line(self, p: tuple[int, int]) -> int:
-        ax, ay = self.cfg.line.a
-        bx, by = self.cfg.line.b
-        cross = (bx - ax) * (p[1] - ay) - (by - ay) * (p[0] - ax)
-        if cross > 0:
-            return 1
-        if cross < 0:
-            return -1
-        return 0

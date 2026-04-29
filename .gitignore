@@ -25,3 +25,7 @@ infra/mosquitto/data/*
 
 # vite-plugin-pwa dev artifacts
 packages/dashboard-web/dev-dist/
+
+# YOLO model weights (downloaded on first run)
+*.pt
+yolov*.pt

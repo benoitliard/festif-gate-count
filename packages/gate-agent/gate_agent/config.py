@@ -21,14 +21,26 @@ class LineConfig(BaseModel):
 class TrackingConfig(BaseModel):
     """Computer-vision pipeline parameters."""
 
+    engine: Literal["mog2", "yolo"] = "mog2"
+
+    # Common
+    line: LineConfig
+    downscale_width: int = 640
+    cooldown_seconds: float = 1.0
+
+    # MOG2-specific
     min_area: int = 1500
     max_distance: int = 80
     max_age_frames: int = 30
-    cooldown_seconds: float = 1.0
-    line: LineConfig
-    downscale_width: int = 640
     learning_rate: float = -1.0
     var_threshold: float = 32.0
+
+    # YOLO-specific
+    yolo_model: str = "yolov8n.pt"  # nano by default; switch to yolov8s.pt / m / l for accuracy
+    yolo_conf: float = 0.35
+    yolo_iou: float = 0.5
+    yolo_device: str | None = None  # 'mps' on Apple Silicon, 'cuda' on NVIDIA, None=auto/cpu
+    yolo_classes: list[int] = [0]  # COCO class 0 = person
 
 
 class GateConfig(BaseModel):
