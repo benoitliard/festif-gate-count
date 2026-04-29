@@ -25,12 +25,14 @@ class MqttBus:
         keepalive: int,
         on_epoch: Callable[[int], None],
         on_publish_ack: Callable[[int], None],
+        preview_url: str | None = None,
     ):
         self.url = url
         self.gate_id = gate_id
         self.keepalive = keepalive
         self._on_epoch = on_epoch
         self._on_publish_ack = on_publish_ack
+        self.preview_url = preview_url
 
         parsed = urlparse(url)
         host = parsed.hostname or "localhost"
@@ -44,8 +46,8 @@ class MqttBus:
         )
         self.client.username_pw_set(parsed.username, parsed.password) if parsed.username else None
 
-        # LWT
-        will_payload = json.dumps({"state": "offline", "ts": _now_iso()})
+        # LWT (offline, no preview)
+        will_payload = json.dumps({"state": "offline", "ts": _now_iso(), "preview_url": None})
         self.client.will_set(
             f"gates/{gate_id}/status",
             payload=will_payload,
@@ -76,7 +78,7 @@ class MqttBus:
         if self._connected.is_set():
             self.client.publish(
                 f"gates/{self.gate_id}/status",
-                payload=json.dumps({"state": "offline", "ts": _now_iso()}),
+                payload=json.dumps({"state": "offline", "ts": _now_iso(), "preview_url": None}),
                 qos=1,
                 retain=True,
             )
@@ -115,7 +117,9 @@ class MqttBus:
         # Announce online (retained, overrides LWT)
         client.publish(
             f"gates/{self.gate_id}/status",
-            payload=json.dumps({"state": "online", "ts": _now_iso()}),
+            payload=json.dumps(
+                {"state": "online", "ts": _now_iso(), "preview_url": self.preview_url}
+            ),
             qos=1,
             retain=True,
         )

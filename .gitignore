@@ -22,3 +22,6 @@ infra/mosquitto/data/*
 # env
 .env
 .env.local
+
+# vite-plugin-pwa dev artifacts
+packages/dashboard-web/dev-dist/

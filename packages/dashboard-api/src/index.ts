@@ -34,6 +34,8 @@ async function main() {
 
   fastify.get("/api/status", async () => store.getSnapshot());
 
+  fastify.get("/api/history", async () => ({ days: store.getHistoryByDate() }));
+
   fastify.get("/api/triggers", async () => {
     const gates = store.listGates();
     return {

@@ -11,6 +11,7 @@ from .buffer import EventBuffer
 from .config import GateConfig
 from .events import GateEvent, Direction
 from .mqtt_client import MqttBus
+from .preview import PreviewServer
 from .sources.base import EventSource
 
 log = logging.getLogger(__name__)
@@ -28,12 +29,19 @@ class GateRuntime:
         self._mid_lock = threading.Lock()
         self._stop = threading.Event()
         self._epoch_received = threading.Event()
+
+        # Preview server (optional). Started before MQTT so the URL can be advertised.
+        self.preview: Optional[PreviewServer] = None
+        if config.preview_port is not None:
+            self.preview = PreviewServer(gate_id=config.gate_id, port=config.preview_port)
+
         self.bus = MqttBus(
             url=config.mqtt_url,
             gate_id=config.gate_id,
             keepalive=config.mqtt_keepalive,
             on_epoch=self._handle_epoch,
             on_publish_ack=self._handle_ack,
+            preview_url=self.preview.url if self.preview else None,
         )
 
     # --- event ingestion (called by sources) ---
@@ -85,6 +93,9 @@ class GateRuntime:
         signal.signal(signal.SIGINT, self._on_signal)
         signal.signal(signal.SIGTERM, self._on_signal)
 
+        if self.preview is not None:
+            self.preview.start()
+
         self.bus.connect_async()
 
         # Wait briefly for retained epoch
@@ -107,6 +118,8 @@ class GateRuntime:
         finally:
             self._stop.set()
             self.bus.shutdown()
+            if self.preview is not None:
+                self.preview.stop()
             self.buffer.close()
 
     def _on_signal(self, signum, frame):  # type: ignore[no-untyped-def]

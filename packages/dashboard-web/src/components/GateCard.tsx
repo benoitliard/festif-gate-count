@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { GateStatus, GateTotals } from "../types";
 
@@ -27,6 +28,8 @@ export function GateCard({ status, totals, highlight, highlightAt, highlightDire
   const net = inCount - outCount;
   const inGlow = highlight && highlightDirection === "in";
   const outGlow = highlight && highlightDirection === "out";
+  const hasPreview = !!status.preview_url && status.state !== "offline";
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   return (
     <div
@@ -39,10 +42,32 @@ export function GateCard({ status, totals, highlight, highlightAt, highlightDire
           <span className={`h-2 w-2 rounded-full shadow-[0_0_10px] ${dotClass[status.state]}`} />
           <span className="font-mono text-sm text-slate-100">{status.gate_id}</span>
         </div>
-        <span className="font-mono text-[10px] uppercase tracking-widest text-slate-500">
-          {stateLabel[status.state]}
-        </span>
+        <div className="flex items-center gap-2">
+          {hasPreview && (
+            <button
+              type="button"
+              onClick={() => setPreviewOpen((v) => !v)}
+              className="rounded-md border border-slate-700 px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest text-slate-300 hover:bg-slate-800"
+            >
+              {previewOpen ? "▾ live" : "▸ live"}
+            </button>
+          )}
+          <span className="font-mono text-[10px] uppercase tracking-widest text-slate-500">
+            {stateLabel[status.state]}
+          </span>
+        </div>
       </div>
+
+      {hasPreview && previewOpen && status.preview_url && (
+        <div className="mb-3 overflow-hidden rounded-lg border border-slate-800 bg-black">
+          <img
+            src={status.preview_url}
+            alt={`${status.gate_id} live preview`}
+            className="block w-full"
+            loading="lazy"
+          />
+        </div>
+      )}
 
       <div className="flex items-baseline justify-between">
         <div className="flex items-baseline gap-2">

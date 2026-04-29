@@ -4,10 +4,12 @@ import logging
 import queue
 import threading
 import time
+from typing import Optional
 
 import cv2
 
 from ..config import TrackingConfig
+from ..preview import PreviewServer
 from .base import IngestFn
 from .tracking import CrossingTracker
 
@@ -17,9 +19,10 @@ log = logging.getLogger(__name__)
 class WebcamSource:
     """macOS-friendly webcam source: thread reader with bounded queue, drops stale frames."""
 
-    def __init__(self, index: int, tracking: TrackingConfig):
+    def __init__(self, index: int, tracking: TrackingConfig, preview: Optional[PreviewServer] = None):
         self.index = index
         self.tracking = tracking
+        self.preview = preview
 
     def run(self, ingest: IngestFn, stop: threading.Event) -> None:
         cap = cv2.VideoCapture(self.index, cv2.CAP_AVFOUNDATION)
@@ -56,7 +59,9 @@ class WebcamSource:
                     frame = frame_q.get(timeout=0.5)
                 except queue.Empty:
                     continue
-                _, crossings = tracker.process(frame)
+                annotated, crossings = tracker.process(frame)
+                if self.preview is not None:
+                    self.preview.push_frame(annotated)
                 for direction in crossings:
                     ingest(direction)  # type: ignore[arg-type]
         finally:

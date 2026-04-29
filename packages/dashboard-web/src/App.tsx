@@ -1,6 +1,7 @@
 import { useDashboardSocket } from "./hooks/useDashboardSocket";
 import { Counter } from "./components/Counter";
 import { GateStatusList } from "./components/GateStatusList";
+import { HistorySection } from "./components/HistorySection";
 import { ResetButton } from "./components/ResetButton";
 
 export function App() {
@@ -46,6 +47,13 @@ export function App() {
             lastTickGateId={state.lastTickGateId}
             lastTickDirection={state.lastTickDirection}
           />
+        </section>
+
+        <section className="mb-8">
+          <h2 className="mb-2 text-xs font-semibold uppercase tracking-widest text-slate-400">
+            Historique
+          </h2>
+          <HistorySection epoch={state.epoch} lastTickAt={state.lastTickAt} />
         </section>
 
         <section className="mt-auto">

@@ -120,28 +120,35 @@ function handleStatus(
   ctx: { store: Store; broadcaster: Broadcaster; log: FastifyBaseLogger }
 ) {
   let state: "online" | "offline" = "offline";
+  let previewUrl: string | null = null;
   try {
-    const parsed = JSON.parse(raw) as { state?: string };
+    const parsed = JSON.parse(raw) as { state?: string; preview_url?: string | null };
     if (parsed.state === "online") state = "online";
+    previewUrl = parsed.preview_url ?? null;
   } catch {
     // tolerate empty / invalid status retained payload
   }
   const now = Date.now();
-  ctx.store.upsertGateStatus(gateId, state, now);
+  ctx.store.upsertGateStatus(gateId, state, now, previewUrl);
   ctx.broadcaster.broadcast({
     type: "gate",
-    gate: { gate_id: gateId, state, last_seen_at: now },
+    gate: { gate_id: gateId, state, last_seen_at: now, preview_url: previewUrl },
   });
 }
 
 function handleHeartbeat(gateId: string, ctx: { store: Store; broadcaster: Broadcaster }) {
   const now = Date.now();
-  const before = ctx.store.listGates().find((g) => g.gate_id === gateId)?.state;
+  const existing = ctx.store.listGates().find((g) => g.gate_id === gateId);
   ctx.store.touchGate(gateId, now);
-  if (before !== "online") {
+  if (existing?.state !== "online") {
     ctx.broadcaster.broadcast({
       type: "gate",
-      gate: { gate_id: gateId, state: "online", last_seen_at: now },
+      gate: {
+        gate_id: gateId,
+        state: "online",
+        last_seen_at: now,
+        preview_url: existing?.preview_url ?? null,
+      },
     });
   }
 }

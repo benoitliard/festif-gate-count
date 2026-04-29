@@ -55,6 +55,9 @@ class GateConfig(BaseModel):
     # tracking (used by video-file and webcam)
     tracking: TrackingConfig | None = None
 
+    # MJPEG preview server (optional, used by webcam and video-file modes)
+    preview_port: int | None = None
+
     @field_validator("db_path")
     @classmethod
     def _expand_db_path(cls, v: str, info) -> str:

@@ -24,6 +24,7 @@ export interface GateStatusRow {
   gate_id: string;
   state: "online" | "offline" | "stale";
   last_seen_at: number;
+  preview_url: string | null;
 }
 
 export interface GateTotals {
@@ -76,7 +77,8 @@ export class Store {
       CREATE TABLE IF NOT EXISTS gate_status (
         gate_id        TEXT PRIMARY KEY,
         state          TEXT NOT NULL,
-        last_seen_at   INTEGER NOT NULL
+        last_seen_at   INTEGER NOT NULL,
+        preview_url    TEXT
       );
       CREATE TABLE IF NOT EXISTS gate_totals (
         epoch       INTEGER NOT NULL,
@@ -183,28 +185,73 @@ export class Store {
     return tx();
   }
 
-  upsertGateStatus(gateId: string, state: "online" | "offline" | "stale", lastSeenAt: number) {
+  /**
+   * Upsert from an explicit status message. The caller knows whether the gate
+   * has a preview_url, so we overwrite it directly (online publishes the URL,
+   * offline publishes null).
+   */
+  upsertGateStatus(
+    gateId: string,
+    state: "online" | "offline" | "stale",
+    lastSeenAt: number,
+    previewUrl: string | null = null
+  ) {
     this.db
       .prepare(
-        `INSERT INTO gate_status (gate_id, state, last_seen_at) VALUES (?, ?, ?)
-         ON CONFLICT(gate_id) DO UPDATE SET state = excluded.state, last_seen_at = excluded.last_seen_at`
+        `INSERT INTO gate_status (gate_id, state, last_seen_at, preview_url) VALUES (?, ?, ?, ?)
+         ON CONFLICT(gate_id) DO UPDATE SET
+           state = excluded.state,
+           last_seen_at = excluded.last_seen_at,
+           preview_url = excluded.preview_url`
       )
-      .run(gateId, state, lastSeenAt);
+      .run(gateId, state, lastSeenAt, previewUrl);
   }
 
+  /** Heartbeat: bump last_seen_at and mark online, but never touch preview_url. */
   touchGate(gateId: string, at: number) {
     this.db
       .prepare(
-        `INSERT INTO gate_status (gate_id, state, last_seen_at) VALUES (?, 'online', ?)
+        `INSERT INTO gate_status (gate_id, state, last_seen_at, preview_url) VALUES (?, 'online', ?, NULL)
          ON CONFLICT(gate_id) DO UPDATE SET state = 'online', last_seen_at = excluded.last_seen_at`
       )
       .run(gateId, at);
   }
 
+  /** Staleness sweep: never resurrect or change preview_url, just shift state. */
+  markGateState(gateId: string, state: "online" | "offline" | "stale") {
+    this.db.prepare("UPDATE gate_status SET state = ? WHERE gate_id = ?").run(state, gateId);
+  }
+
   listGates(): GateStatusRow[] {
     return this.db
-      .prepare("SELECT gate_id, state, last_seen_at FROM gate_status ORDER BY gate_id")
+      .prepare("SELECT gate_id, state, last_seen_at, preview_url FROM gate_status ORDER BY gate_id")
       .all() as GateStatusRow[];
+  }
+
+  /**
+   * Aggregate counts per local-day from `events_seen` since the given epoch start
+   * (or all-time if epoch is undefined). Returns rows sorted oldest → newest.
+   */
+  getHistoryByDate(): Array<{ date: string; in: number; out: number; net: number; events: number }> {
+    const rows = this.db
+      .prepare(
+        `SELECT
+           strftime('%Y-%m-%d', applied_at / 1000, 'unixepoch', 'localtime') AS date,
+           SUM(CASE WHEN direction = 'in'  THEN 1 ELSE 0 END) AS in_count,
+           SUM(CASE WHEN direction = 'out' THEN 1 ELSE 0 END) AS out_count,
+           COUNT(*) AS events
+         FROM events_seen
+         GROUP BY date
+         ORDER BY date DESC`
+      )
+      .all() as { date: string; in_count: number; out_count: number; events: number }[];
+    return rows.map((r) => ({
+      date: r.date,
+      in: r.in_count,
+      out: r.out_count,
+      net: r.in_count - r.out_count,
+      events: r.events,
+    }));
   }
 
   refreshStaleness(staleAfterMs: number, offlineAfterMs: number): GateStatusRow[] {
@@ -218,7 +265,7 @@ export class Store {
       else if (age > staleAfterMs) newState = "stale";
       else newState = "online";
       if (newState !== row.state) {
-        this.db.prepare("UPDATE gate_status SET state = ? WHERE gate_id = ?").run(newState, row.gate_id);
+        this.markGateState(row.gate_id, newState);
         changed.push({ ...row, state: newState });
       }
     }

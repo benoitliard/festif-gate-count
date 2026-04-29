@@ -4,6 +4,15 @@ export interface GateStatus {
   gate_id: string;
   state: GateState;
   last_seen_at: number;
+  preview_url: string | null;
+}
+
+export interface DayTotal {
+  date: string;
+  in: number;
+  out: number;
+  net: number;
+  events: number;
 }
 
 export interface GateTotals {

@@ -22,7 +22,7 @@ export function GateStatusList({ gates, gateTotals, lastTickAt, lastTickGateId, 
   const phantomGates = Object.keys(gateTotals).filter((id) => !knownIds.has(id));
   const allRows = [
     ...gates,
-    ...phantomGates.map<GateStatus>((id) => ({ gate_id: id, state: "offline", last_seen_at: 0 })),
+    ...phantomGates.map<GateStatus>((id) => ({ gate_id: id, state: "offline", last_seen_at: 0, preview_url: null })),
   ];
 
   return (

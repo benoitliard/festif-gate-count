@@ -4,10 +4,12 @@ import logging
 import threading
 import time
 from pathlib import Path
+from typing import Optional
 
 import cv2
 
 from ..config import TrackingConfig
+from ..preview import PreviewServer
 from .base import IngestFn
 from .tracking import CrossingTracker
 
@@ -15,10 +17,11 @@ log = logging.getLogger(__name__)
 
 
 class VideoFileSource:
-    def __init__(self, path: str, loop: bool, tracking: TrackingConfig):
+    def __init__(self, path: str, loop: bool, tracking: TrackingConfig, preview: Optional[PreviewServer] = None):
         self.path = Path(path)
         self.loop = loop
         self.tracking = tracking
+        self.preview = preview
 
     def run(self, ingest: IngestFn, stop: threading.Event) -> None:
         if not self.path.exists():
@@ -38,7 +41,9 @@ class VideoFileSource:
                         cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
                         continue
                     break
-                _, crossings = tracker.process(frame)
+                annotated, crossings = tracker.process(frame)
+                if self.preview is not None:
+                    self.preview.push_frame(annotated)
                 for direction in crossings:
                     ingest(direction)  # type: ignore[arg-type]
                 time.sleep(delay)
