@@ -1,0 +1,22 @@
+gate_id: gate-webcam-2
+role: bidirectional
+mode: webcam
+mqtt_url: mqtt://localhost:1884
+mqtt_keepalive: 10
+heartbeat_seconds: 5
+epoch_wait_seconds: 2
+db_path: data/{gate_id}.db
+webcam_index: 1               # 0 = MacBook built-in, 1 = first USB cam (adjust via list_cameras.py)
+preview_port: 8502            # different port from gate-webcam (8501)
+tracking:
+  engine: yolo
+  cooldown_seconds: 1.0
+  downscale_width: 960
+  yolo_model: yolov8n.pt
+  yolo_conf: 0.4
+  yolo_iou: 0.5
+  yolo_classes: [0]
+  line:
+    a: [480, 0]
+    b: [480, 720]
+    in_side: positive
