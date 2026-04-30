@@ -12,7 +12,9 @@ export interface GateEvent {
 
 export interface CrowdEstimate {
   gate_id: string;
-  count: number;
+  count: number;          // calibrated count
+  raw_count: number;      // as published by the gate
+  factor: number;         // multiplier currently applied
   confidence: string | null;
   engine: string | null;
   ts: string;
@@ -103,7 +105,9 @@ export class Store {
       );
       CREATE TABLE IF NOT EXISTS crowd_latest (
         gate_id      TEXT PRIMARY KEY,
-        count        INTEGER NOT NULL,
+        count        INTEGER NOT NULL,    -- calibrated count = raw * factor
+        raw_count    INTEGER NOT NULL,    -- as published by the gate
+        factor       REAL NOT NULL DEFAULT 1.0,
         confidence   TEXT,
         engine       TEXT,
         ts           TEXT NOT NULL,
@@ -113,10 +117,18 @@ export class Store {
         id           INTEGER PRIMARY KEY AUTOINCREMENT,
         gate_id      TEXT NOT NULL,
         count        INTEGER NOT NULL,
+        raw_count    INTEGER NOT NULL,
+        factor       REAL NOT NULL DEFAULT 1.0,
         confidence   TEXT,
         engine       TEXT,
         ts           TEXT NOT NULL,
         applied_at   INTEGER NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS crowd_calibrations (
+        gate_id      TEXT PRIMARY KEY,
+        factor       REAL NOT NULL,
+        updated_at   INTEGER NOT NULL,
+        updated_by   TEXT
       );
       CREATE INDEX IF NOT EXISTS idx_crowd_history_gate ON crowd_history(gate_id, applied_at);
     `);
@@ -260,50 +272,99 @@ export class Store {
 
   applyCrowdEstimate(input: {
     gate_id: string;
-    count: number;
+    count: number;        // raw_count from the gate
     confidence?: string | null;
     engine?: string | null;
     ts: string;
-  }): { count: number; ts: string } {
+  }): { count: number; raw_count: number; factor: number; ts: string } {
     const appliedAt = Date.now();
+    const factor = this.getCalibrationFactor(input.gate_id);
+    const rawCount = Math.max(0, Math.round(input.count));
+    const calibrated = Math.max(0, Math.round(rawCount * factor));
     const tx = this.db.transaction(() => {
       this.db
         .prepare(
-          `INSERT INTO crowd_latest (gate_id, count, confidence, engine, ts, applied_at)
-           VALUES (?, ?, ?, ?, ?, ?)
+          `INSERT INTO crowd_latest (gate_id, count, raw_count, factor, confidence, engine, ts, applied_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(gate_id) DO UPDATE SET
              count = excluded.count,
+             raw_count = excluded.raw_count,
+             factor = excluded.factor,
              confidence = excluded.confidence,
              engine = excluded.engine,
              ts = excluded.ts,
              applied_at = excluded.applied_at`
         )
-        .run(input.gate_id, input.count, input.confidence ?? null, input.engine ?? null, input.ts, appliedAt);
+        .run(input.gate_id, calibrated, rawCount, factor, input.confidence ?? null, input.engine ?? null, input.ts, appliedAt);
       this.db
         .prepare(
-          `INSERT INTO crowd_history (gate_id, count, confidence, engine, ts, applied_at)
-           VALUES (?, ?, ?, ?, ?, ?)`
+          `INSERT INTO crowd_history (gate_id, count, raw_count, factor, confidence, engine, ts, applied_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
         )
-        .run(input.gate_id, input.count, input.confidence ?? null, input.engine ?? null, input.ts, appliedAt);
+        .run(input.gate_id, calibrated, rawCount, factor, input.confidence ?? null, input.engine ?? null, input.ts, appliedAt);
     });
     tx();
-    return { count: input.count, ts: input.ts };
+    return { count: calibrated, raw_count: rawCount, factor, ts: input.ts };
   }
 
-  listCrowdLatest(): Array<{ gate_id: string; count: number; confidence: string | null; engine: string | null; ts: string; applied_at: number }> {
-    return this.db
-      .prepare(
-        "SELECT gate_id, count, confidence, engine, ts, applied_at FROM crowd_latest ORDER BY gate_id"
-      )
-      .all() as Array<{ gate_id: string; count: number; confidence: string | null; engine: string | null; ts: string; applied_at: number }>;
+  getCalibrationFactor(gateId: string): number {
+    const row = this.db
+      .prepare("SELECT factor FROM crowd_calibrations WHERE gate_id = ?")
+      .get(gateId) as { factor: number } | undefined;
+    return row?.factor ?? 1.0;
   }
 
-  getCrowdHistory(gateId: string, limit = 200): Array<{ count: number; ts: string; applied_at: number }> {
+  setCalibrationFactor(gateId: string, factor: number, updatedBy: string | null = null): {
+    gate_id: string;
+    factor: number;
+    latest: CrowdEstimate | null;
+  } {
+    const clean = Math.max(0.01, Math.min(100.0, factor));
+    const now = Date.now();
+    const tx = this.db.transaction(() => {
+      this.db
+        .prepare(
+          `INSERT INTO crowd_calibrations (gate_id, factor, updated_at, updated_by) VALUES (?, ?, ?, ?)
+           ON CONFLICT(gate_id) DO UPDATE SET
+             factor = excluded.factor,
+             updated_at = excluded.updated_at,
+             updated_by = excluded.updated_by`
+        )
+        .run(gateId, clean, now, updatedBy);
+      // Reapply factor to the latest reading (if any) so the dashboard updates immediately.
+      const latest = this.db
+        .prepare("SELECT raw_count FROM crowd_latest WHERE gate_id = ?")
+        .get(gateId) as { raw_count: number } | undefined;
+      if (latest) {
+        const newCount = Math.max(0, Math.round(latest.raw_count * clean));
+        this.db
+          .prepare("UPDATE crowd_latest SET count = ?, factor = ?, applied_at = ? WHERE gate_id = ?")
+          .run(newCount, clean, now, gateId);
+      }
+    });
+    tx();
+    const latest = (this.db
+      .prepare(
+        "SELECT gate_id, count, raw_count, factor, confidence, engine, ts, applied_at FROM crowd_latest WHERE gate_id = ?"
+      )
+      .get(gateId) as CrowdEstimate | undefined) ?? null;
+    return { gate_id: gateId, factor: clean, latest };
+  }
+
+  listCrowdLatest(): CrowdEstimate[] {
     return this.db
       .prepare(
-        "SELECT count, ts, applied_at FROM crowd_history WHERE gate_id = ? ORDER BY applied_at DESC LIMIT ?"
+        "SELECT gate_id, count, raw_count, factor, confidence, engine, ts, applied_at FROM crowd_latest ORDER BY gate_id"
       )
-      .all(gateId, limit) as Array<{ count: number; ts: string; applied_at: number }>;
+      .all() as CrowdEstimate[];
+  }
+
+  getCrowdHistory(gateId: string, limit = 200): Array<{ count: number; raw_count: number; factor: number; ts: string; applied_at: number }> {
+    return this.db
+      .prepare(
+        "SELECT count, raw_count, factor, ts, applied_at FROM crowd_history WHERE gate_id = ? ORDER BY applied_at DESC LIMIT ?"
+      )
+      .all(gateId, limit) as Array<{ count: number; raw_count: number; factor: number; ts: string; applied_at: number }>;
   }
 
   /**

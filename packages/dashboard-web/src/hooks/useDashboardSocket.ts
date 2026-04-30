@@ -79,7 +79,15 @@ function reduce(s: DashboardState, msg: ServerMsg): DashboardState {
       const crowdsMap = Object.fromEntries(
         msg.crowds.map((c) => [
           c.gate_id,
-          { gate_id: c.gate_id, count: c.count, confidence: c.confidence, engine: c.engine, ts: c.ts },
+          {
+            gate_id: c.gate_id,
+            count: c.count,
+            raw_count: c.raw_count ?? c.count,
+            factor: c.factor ?? 1,
+            confidence: c.confidence,
+            engine: c.engine,
+            ts: c.ts,
+          },
         ])
       );
       return {
@@ -112,11 +120,21 @@ function reduce(s: DashboardState, msg: ServerMsg): DashboardState {
           [msg.gateId]: {
             gate_id: msg.gateId,
             count: msg.count,
+            raw_count: msg.raw_count,
+            factor: msg.factor,
             confidence: msg.confidence,
             engine: msg.engine,
             ts: msg.ts,
           },
         },
+      };
+    }
+    case "calibration": {
+      const existing = s.crowds[msg.gateId];
+      if (!existing) return s;
+      return {
+        ...s,
+        crowds: { ...s.crowds, [msg.gateId]: { ...existing, factor: msg.factor } },
       };
     }
     case "gate": {

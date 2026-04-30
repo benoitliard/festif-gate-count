@@ -18,6 +18,8 @@ export interface DayTotal {
 export interface CrowdEstimate {
   gate_id: string;
   count: number;
+  raw_count: number;
+  factor: number;
   confidence: string | null;
   engine: string | null;
   ts: string;
@@ -38,7 +40,7 @@ export type ServerMsg =
       net: number;
       gates: GateStatus[];
       gateTotals: GateTotals[];
-      crowds: (CrowdEstimate & { applied_at: number })[];
+      crowds: Array<CrowdEstimate & { applied_at: number; raw_count?: number; factor?: number }>;
       updatedAt: number;
     }
   | {
@@ -54,10 +56,13 @@ export type ServerMsg =
       type: "crowd";
       gateId: string;
       count: number;
+      raw_count: number;
+      factor: number;
       confidence: string | null;
       engine: string | null;
       ts: string;
     }
+  | { type: "calibration"; gateId: string; factor: number }
   | { type: "gate"; gate: GateStatus }
   | { type: "reset"; epoch: number };
 

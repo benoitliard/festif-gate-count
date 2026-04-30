@@ -26,9 +26,16 @@ export type ServerMsg =
       type: "crowd";
       gateId: string;
       count: number;
+      raw_count: number;
+      factor: number;
       confidence: string | null;
       engine: string | null;
       ts: string;
+    }
+  | {
+      type: "calibration";
+      gateId: string;
+      factor: number;
     }
   | { type: "gate"; gate: GateStatusRow }
   | { type: "reset"; epoch: number };

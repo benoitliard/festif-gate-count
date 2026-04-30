@@ -46,6 +46,34 @@ async function main() {
     }
   );
 
+  fastify.post<{
+    Params: { gateId: string };
+    Body: { factor?: number; token?: string };
+  }>("/api/crowds/:gateId/calibration", async (req, reply) => {
+    if (!req.body?.token || req.body.token !== config.resetToken) {
+      return reply.code(401).send({ error: "invalid_token" });
+    }
+    const factor = Number(req.body.factor);
+    if (!Number.isFinite(factor) || factor <= 0) {
+      return reply.code(400).send({ error: "factor must be a positive number" });
+    }
+    const result = store.setCalibrationFactor(req.params.gateId, factor);
+    broadcaster.broadcast({ type: "calibration", gateId: req.params.gateId, factor: result.factor });
+    if (result.latest) {
+      broadcaster.broadcast({
+        type: "crowd",
+        gateId: req.params.gateId,
+        count: result.latest.count,
+        raw_count: result.latest.raw_count,
+        factor: result.latest.factor,
+        confidence: result.latest.confidence,
+        engine: result.latest.engine,
+        ts: result.latest.ts,
+      });
+    }
+    return { factor: result.factor, latest: result.latest };
+  });
+
   fastify.get("/api/triggers", async () => {
     const gates = store.listGates();
     return {

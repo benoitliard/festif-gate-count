@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { CrowdEstimate, GateStatus } from "../types";
 
@@ -50,6 +50,7 @@ export function CrowdSection({ crowds, gates }: Props) {
 
 function CrowdCard({ estimate, gate }: { estimate: CrowdEstimate; gate?: GateStatus }) {
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [calibrationOpen, setCalibrationOpen] = useState(false);
   const previewUrl = gate?.preview_url ?? null;
 
   return (
@@ -69,6 +70,13 @@ function CrowdCard({ estimate, gate }: { estimate: CrowdEstimate; gate?: GateSta
               {previewOpen ? "▾ live" : "▸ live"}
             </button>
           )}
+          <button
+            type="button"
+            onClick={() => setCalibrationOpen((v) => !v)}
+            className="rounded-md border border-slate-700 px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest text-slate-300 hover:bg-slate-800"
+          >
+            ×{estimate.factor.toFixed(2)}
+          </button>
           <span className="font-mono text-[10px] uppercase tracking-widest text-slate-500">
             il y a {howFresh(estimate.ts)}
           </span>
@@ -78,7 +86,7 @@ function CrowdCard({ estimate, gate }: { estimate: CrowdEstimate; gate?: GateSta
       <div className="flex items-baseline gap-3">
         <AnimatePresence mode="popLayout">
           <motion.span
-            key={estimate.ts}
+            key={`${estimate.ts}-${estimate.factor}`}
             initial={{ scale: 1.06, color: "#f0abfc" }}
             animate={{ scale: 1, color: "#f8fafc" }}
             transition={{ duration: 0.45, ease: "easeOut" }}
@@ -87,16 +95,115 @@ function CrowdCard({ estimate, gate }: { estimate: CrowdEstimate; gate?: GateSta
             {formatCount(estimate.count)}
           </motion.span>
         </AnimatePresence>
-        <span className="text-xs uppercase tracking-widest text-slate-500">
-          {estimate.engine ?? "?"}
-        </span>
+        <div className="flex flex-col">
+          <span className="text-xs uppercase tracking-widest text-slate-500">
+            {estimate.engine ?? "?"}
+          </span>
+          {estimate.factor !== 1 && (
+            <span className="font-mono text-[10px] text-slate-600">
+              brut: {formatCount(estimate.raw_count)}
+            </span>
+          )}
+        </div>
       </div>
+
+      {calibrationOpen && (
+        <CalibrationControl gateId={estimate.gate_id} factor={estimate.factor} rawCount={estimate.raw_count} />
+      )}
 
       {previewOpen && previewUrl && (
         <div className="mt-3 overflow-hidden rounded-lg border border-slate-800 bg-black">
           <img src={previewUrl} alt={`${estimate.gate_id} preview`} className="block w-full" loading="lazy" />
         </div>
       )}
+    </div>
+  );
+}
+
+function CalibrationControl({
+  gateId,
+  factor,
+  rawCount,
+}: {
+  gateId: string;
+  factor: number;
+  rawCount: number;
+}) {
+  const [draft, setDraft] = useState(factor);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // sync local slider when WS pushes a new factor
+  useEffect(() => {
+    setDraft(factor);
+  }, [factor]);
+
+  async function commit(value: number) {
+    setPending(true);
+    setError(null);
+    const token = localStorage.getItem("gate-counter:reset-token") ?? "";
+    if (!token) {
+      setError("Token admin requis (utilise le bouton reset une fois pour le sauvegarder).");
+      setPending(false);
+      return;
+    }
+    try {
+      const res = await fetch(`/api/crowds/${encodeURIComponent(gateId)}/calibration`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token, factor: value }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? `HTTP ${res.status}`);
+      }
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setPending(false);
+    }
+  }
+
+  const previewedCount = Math.max(0, Math.round(rawCount * draft));
+
+  return (
+    <div className="mt-3 rounded-lg border border-slate-800 bg-slate-950/40 p-3">
+      <div className="mb-2 flex items-center justify-between">
+        <span className="font-mono text-[11px] uppercase tracking-widest text-slate-400">
+          Calibration ×{draft.toFixed(2)}
+        </span>
+        <span className="font-mono text-[10px] text-slate-500">
+          {formatCount(rawCount)} → {formatCount(previewedCount)}
+        </span>
+      </div>
+      <input
+        type="range"
+        min={0.1}
+        max={5}
+        step={0.05}
+        value={draft}
+        onChange={(e) => setDraft(parseFloat(e.target.value))}
+        onMouseUp={() => commit(draft)}
+        onTouchEnd={() => commit(draft)}
+        className="w-full accent-fuchsia-400"
+        disabled={pending}
+      />
+      <div className="mt-2 flex items-center gap-2">
+        {[0.5, 1, 2, 3].map((preset) => (
+          <button
+            key={preset}
+            type="button"
+            onClick={() => {
+              setDraft(preset);
+              commit(preset);
+            }}
+            className="rounded-md border border-slate-700 px-2 py-0.5 font-mono text-[10px] text-slate-300 hover:bg-slate-800"
+          >
+            ×{preset.toFixed(1)}
+          </button>
+        ))}
+      </div>
+      {error && <div className="mt-2 text-xs text-rose-300">{error}</div>}
     </div>
   );
 }

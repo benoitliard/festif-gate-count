@@ -154,7 +154,7 @@ function handleCrowd(
     ctx.log.warn({ parsed }, "Crowd payload missing count/ts");
     return;
   }
-  ctx.store.applyCrowdEstimate({
+  const result = ctx.store.applyCrowdEstimate({
     gate_id: gateId,
     count: Math.max(0, Math.round(parsed.count)),
     confidence: parsed.confidence ?? null,
@@ -165,7 +165,9 @@ function handleCrowd(
   ctx.broadcaster.broadcast({
     type: "crowd",
     gateId,
-    count: Math.max(0, Math.round(parsed.count)),
+    count: result.count,
+    raw_count: result.raw_count,
+    factor: result.factor,
     confidence: parsed.confidence ?? null,
     engine: parsed.engine ?? null,
     ts: parsed.ts,
