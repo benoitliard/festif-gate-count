@@ -21,7 +21,7 @@ class LineConfig(BaseModel):
 class CrowdDensityConfig(BaseModel):
     """Snapshot-based crowd estimation. Gauge, not counter."""
 
-    engine: Literal["yolo-tiles", "csrnet"] = "yolo-tiles"
+    engine: Literal["yolo-tiles", "csrnet", "p2pnet"] = "yolo-tiles"
 
     # Cadence
     snapshot_interval_seconds: float = 30.0
@@ -47,6 +47,11 @@ class CrowdDensityConfig(BaseModel):
     # CSRNet (if engine == 'csrnet'). The user supplies an ONNX path.
     csrnet_onnx_path: str | None = None
     csrnet_input_size: tuple[int, int] = (768, 1024)  # (h, w)
+
+    # P2PNet (if engine == 'p2pnet'). PyTorch checkpoint (.pth) — see README.
+    p2pnet_weights_path: str | None = None
+    p2pnet_input_size: tuple[int, int] = (768, 1280)
+    p2pnet_score_threshold: float = 0.3
 
 
 class TrackingConfig(BaseModel):

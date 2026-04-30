@@ -9,13 +9,19 @@ db_path: data/{gate_id}.db
 preview_port: 8601
 
 crowd:
-  engine: csrnet
+  engine: p2pnet
   snapshot_interval_seconds: 8     # demo cadence; 30-60s is fine in production
   source: image-file               # offline dry-run with a still
   image_path: ../../assets/festival-night.jpg
 
-  # CSRNet (density-map model, ShanghaiTech Part B pretrained)
-  # Re-export from a .pth.tar with: scripts/export_csrnet_onnx.py
+  # P2PNet (point-detection model, ShanghaiTech Part A pretrained — for dense crowds)
+  # Download SHTechA.pth from joshipunitram/crowd-counting-p2p (HF Space) into
+  # packages/gate-agent/data/p2pnet_shtecha.pth
+  p2pnet_weights_path: data/p2pnet_shtecha.pth
+  p2pnet_input_size: [640, 1024]
+  p2pnet_score_threshold: 0.3
+
+  # CSRNet (density-map model, ShanghaiTech Part B). Set engine: csrnet to use.
   csrnet_onnx_path: ../../assets/csrnet.onnx
   csrnet_input_size: [768, 1024]
 

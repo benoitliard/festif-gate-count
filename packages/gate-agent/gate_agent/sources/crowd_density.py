@@ -208,7 +208,84 @@ def _build_estimator(cfg: CrowdDensityConfig):
         return _YoloTilesEstimator(cfg)
     if cfg.engine == "csrnet":
         return _CsrnetEstimator(cfg)
+    if cfg.engine == "p2pnet":
+        return _P2PNetEstimator(cfg)
     raise SystemExit(f"Unknown crowd engine: {cfg.engine}")
+
+
+class _P2PNetEstimator:
+    """P2PNet: per-head point detection (Rethinking Counting and Localization
+    in Crowds, Song et al, ICCV 2021). Trained on ShanghaiTech Part A — works
+    better than CSRNet on dense scenes. Loads a .pth checkpoint directly,
+    no ONNX export needed.
+    """
+
+    def __init__(self, cfg: CrowdDensityConfig):
+        try:
+            import torch  # type: ignore
+        except ImportError as exc:
+            raise SystemExit("p2pnet engine requires torch") from exc
+        if not cfg.p2pnet_weights_path or not Path(cfg.p2pnet_weights_path).exists():
+            raise SystemExit(
+                f"p2pnet engine: weights not found at {cfg.p2pnet_weights_path!r}. "
+                "Download SHTechA.pth from joshipunitram/crowd-counting-p2p (HF Space)."
+            )
+        from ..models.p2pnet.p2pnet import P2PNet
+        from ..models.p2pnet.backbone import build_backbone
+
+        class _Args:
+            backbone = "vgg16_bn"
+            row = 2
+            line = 2
+
+        self.cfg = cfg
+        self.torch = torch
+        backbone = build_backbone(_Args())
+        self.model = P2PNet(backbone, row=2, line=2)
+        ck = torch.load(cfg.p2pnet_weights_path, map_location="cpu", weights_only=False)
+        state = ck["model"] if isinstance(ck, dict) and "model" in ck else ck
+        self.model.load_state_dict(state, strict=False)
+        self.model.eval()
+        log.info(
+            "P2PNet ready (weights=%s, input=%s, score≥%.2f)",
+            Path(cfg.p2pnet_weights_path).name, cfg.p2pnet_input_size, cfg.p2pnet_score_threshold,
+        )
+
+    def estimate(self, frame: np.ndarray) -> tuple[int, np.ndarray]:
+        torch = self.torch
+        h_target, w_target = self.cfg.p2pnet_input_size
+        # P2PNet wants /128-divisible dims
+        h_target = max(128, (h_target // 128) * 128)
+        w_target = max(128, (w_target // 128) * 128)
+        resized = cv2.resize(frame, (w_target, h_target))
+        rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
+        mean = np.array([0.485, 0.456, 0.406], dtype=np.float32)
+        std = np.array([0.229, 0.224, 0.225], dtype=np.float32)
+        rgb = (rgb - mean) / std
+        chw = np.transpose(rgb, (2, 0, 1))[None]
+        with torch.no_grad():
+            out = self.model(torch.from_numpy(chw))
+        scores = torch.nn.functional.softmax(out["pred_logits"], dim=-1)[:, :, 1][0]
+        points = out["pred_points"][0]
+        thr = self.cfg.p2pnet_score_threshold
+        keep = scores > thr
+        kept_points = points[keep].cpu().numpy()
+        count = int(keep.sum())
+
+        annotated = resized.copy()
+        for px, py in kept_points:
+            cv2.circle(annotated, (int(px), int(py)), 2, (52, 211, 153), -1)
+        cv2.putText(
+            annotated,
+            f"P2PNet @ thr {thr:.2f} · ~{count} people",
+            (12, 28),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            (255, 255, 255),
+            2,
+            cv2.LINE_AA,
+        )
+        return count, annotated
 
 
 class _CsrnetEstimator:
